@@ -406,3 +406,10 @@ Note: Admission and Routing steps apply in cluster mode (multi-instance). Single
 - **Active plans:** `docs/plans/` (implementation plans for in-progress work)
 - **Archived design docs:** `docs/plans/archive/` (completed design docs for architectural reference)
 - **PR history:** Use `git log --oneline main` for the definitive commit history
+
+## Active Technologies
+- Go 1.22+ + `gopkg.in/yaml.v3` (strict parsing), `gonum` (stats), `cobra`, `logrus` (001-infra-nodes-gpus-instances)
+- In-memory node/GPU inventory maps; no external storage (001-infra-nodes-gpus-instances)
+
+## Recent Changes
+- 001-infra-nodes-gpus-instances: Added Go 1.22+ + `gopkg.in/yaml.v3` (strict parsing), `gonum` (stats), `cobra`, `logrus`

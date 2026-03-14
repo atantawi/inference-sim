@@ -33,6 +33,9 @@ type ClusterSimulator struct {
 	trace                *trace.SimulationTrace // nil when trace-level is "none" (BC-1: zero overhead)
 	preGeneratedRequests []*sim.Request         // Pre-generated requests (all workload paths unified)
 	inFlightRequests     map[string]int         // instance ID → dispatched-but-not-completed count (#463)
+
+	// Phase 1A: node/GPU placement manager. Nil when NodePools is empty (backward-compat).
+	placement *PlacementManager
 }
 
 // NewClusterSimulator creates a ClusterSimulator with N instances.
@@ -45,10 +48,14 @@ func NewClusterSimulator(config DeploymentConfig, requests []*sim.Request) *Clus
 	simCfg := config.ToSimConfig()
 	instances := make([]*InstanceSimulator, config.NumInstances)
 	for idx := range instances {
-		instances[idx] = NewInstanceSimulator(
+		inst := NewInstanceSimulator(
 			InstanceID(fmt.Sprintf("instance_%d", idx)),
 			simCfg,
 		)
+		// Populate Model from config so multi-model routing filter works correctly (FR-010).
+		// Empty string = single-model mode (backward-compatible).
+		inst.Model = config.ModelHardwareConfig.Model
+		instances[idx] = inst
 	}
 	// Build instance map for snapshot provider
 	instanceMap := make(map[InstanceID]*InstanceSimulator, len(instances))
@@ -83,6 +90,38 @@ func NewClusterSimulator(config DeploymentConfig, requests []*sim.Request) *Clus
 		routingPolicy:        sim.NewRoutingPolicy(config.RoutingPolicy, config.RoutingScorerConfigs, config.BlockSizeTokens, rng.ForSubsystem(sim.SubsystemRouter)),
 		trace:                simTrace,
 		inFlightRequests:     make(map[string]int, config.NumInstances),
+	}
+
+	// Phase 1A: initialize PlacementManager when node pools are configured.
+	// When NodePools is empty, placement is a no-op (backward-compat).
+	if len(config.NodePools) > 0 {
+		provisionRng := rng.ForSubsystem(subsystemNodeProvisioning)
+		loadingRng := rng.ForSubsystem(subsystemInstanceLoading)
+		cs.placement = NewPlacementManager(config.NodePools, provisionRng, loadingRng, 0)
+
+		// Place each instance onto a node (or mark pending if no capacity).
+		// TP=0 in ModelHardwareConfig means "not configured" — treat as 1 GPU per instance.
+		// This matches the existing behavior for configs that don't specify TP.
+		gpuType := config.ModelHardwareConfig.GPU
+		tpDegree := config.ModelHardwareConfig.TP
+		if tpDegree < 1 {
+			tpDegree = 1 // default to TP=1 when not explicitly set (R3: defensive correction with comment)
+		}
+		for _, inst := range cs.instances {
+			nodeID, gpuIDs, err := cs.placement.PlaceInstance(inst.ID(), inst.Model, gpuType, tpDegree)
+			if err != nil {
+				// No capacity — instance stays in Scheduling (pending) state
+				inst.TransitionTo(InstanceStateScheduling)
+				cs.placement.AddPending(inst.ID(), inst.Model, gpuType, tpDegree)
+			} else {
+				inst.nodeID = nodeID
+				inst.allocatedGPUIDs = gpuIDs
+				inst.warmUpRemaining = config.InstanceLifecycle.WarmUpRequestCount
+				// Schedule loading event; transitions Loading → WarmingUp/Active after delay
+				inst.TransitionTo(InstanceStateLoading)
+				cs.scheduleInstanceLoadedEvent(inst)
+			}
+		}
 	}
 
 	// Startup warning: horizon too small for pipeline (BC-1)
@@ -183,6 +222,14 @@ func (c *ClusterSimulator) Run() error {
 					logrus.Warnf("inFlightRequests[%s] went negative (%d) after delta=%d (completed=%d, dropped=%d) — bookkeeping bug",
 						instID, c.inFlightRequests[instID], delta, completedAfter-completedBefore, droppedAfter-droppedBefore)
 					c.inFlightRequests[instID] = 0
+				}
+				// T042: consume warm-up slots for newly completed requests (Phase 1A).
+				// Each completion on a WarmingUp instance counts against the warm-up budget.
+				completionDelta := int(completedAfter - completedBefore)
+				for i := 0; i < completionDelta; i++ {
+					if inst.IsWarmingUp() {
+						inst.ConsumeWarmUpRequest()
+					}
 				}
 			}
 		}
@@ -343,5 +390,24 @@ func (c *ClusterSimulator) aggregateMetrics() *sim.Metrics {
 		merged.CacheHitRate /= float64(n)
 		merged.KVThrashingRate /= float64(n)
 	}
+
+	// T042: apply warm-up TTFT factor to requests served during warm-up (Phase 1A, R23).
+	// Applied uniformly across all TTFT recording paths.
+	// warmUpRequestIDs is cleared after use to prevent unbounded memory growth.
+	factor := c.config.InstanceLifecycle.effectiveWarmUpFactor()
+	if factor > 1.0 {
+		for _, inst := range c.instances {
+			for _, reqID := range inst.WarmUpRequestIDs() {
+				if ttft, ok := merged.RequestTTFTs[reqID]; ok {
+					// Guard against propagating corrupt TTFT values (R3, R11)
+					if !math.IsNaN(ttft) && !math.IsInf(ttft, 0) {
+						merged.RequestTTFTs[reqID] = ttft * factor
+					}
+				}
+			}
+			inst.clearWarmUpRequestIDs()
+		}
+	}
+
 	return merged
 }

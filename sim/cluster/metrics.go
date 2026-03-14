@@ -480,6 +480,81 @@ func extractMetric(m *RawMetrics, key string) (float64, bool) {
 	}
 }
 
+// ─── Per-model metrics (Phase 1A, FR-011) ───────────────────────────────────
+
+// ModelMetrics holds per-model latency and throughput metrics for JSON output.
+type ModelMetrics struct {
+	Model              string       `json:"model"`
+	TTFT               Distribution `json:"ttft"`
+	E2E                Distribution `json:"e2e"`
+	ThroughputRPS      float64      `json:"throughput_rps"`
+	ThroughputTokenSec float64      `json:"tokens_per_sec"`
+	TotalRequests      int          `json:"total_requests"`
+}
+
+// ComputePerModelMetrics partitions requests by Model field and computes
+// per-model latency distributions and throughput.
+// Returns empty map when no requests have a non-empty Model field (backward-compat).
+// Iterates model names in sorted order for determinism (R2).
+func ComputePerModelMetrics(aggregated *sim.Metrics) map[string]*ModelMetrics {
+	ttftByModel := make(map[string][]float64)
+	e2eByModel := make(map[string][]float64)
+	countByModel := make(map[string]int)
+
+	// Partition TTFT by model
+	for reqID, ttft := range aggregated.RequestTTFTs {
+		req, ok := aggregated.Requests[reqID]
+		if !ok || req.Model == "" {
+			continue
+		}
+		ttftByModel[req.Model] = append(ttftByModel[req.Model], ttft)
+	}
+	// Partition E2E by model
+	for reqID, e2e := range aggregated.RequestE2Es {
+		req, ok := aggregated.Requests[reqID]
+		if !ok || req.Model == "" {
+			continue
+		}
+		e2eByModel[req.Model] = append(e2eByModel[req.Model], e2e)
+		countByModel[req.Model]++
+	}
+
+	if len(ttftByModel) == 0 && len(e2eByModel) == 0 {
+		return nil
+	}
+
+	// Collect all model names (R2: sorted for determinism)
+	allModels := make(map[string]struct{})
+	for k := range ttftByModel {
+		allModels[k] = struct{}{}
+	}
+	for k := range e2eByModel {
+		allModels[k] = struct{}{}
+	}
+	modelNames := make([]string, 0, len(allModels))
+	for name := range allModels {
+		modelNames = append(modelNames, name)
+	}
+	sort.Strings(modelNames)
+
+	result := make(map[string]*ModelMetrics, len(modelNames))
+	for _, name := range modelNames {
+		mm := &ModelMetrics{
+			Model:         name,
+			TTFT:          NewDistribution(ttftByModel[name]),
+			E2E:           NewDistribution(e2eByModel[name]),
+			TotalRequests: countByModel[name],
+		}
+		// Throughput: per-model requests / total simulation duration
+		if aggregated.SimEndedTime > 0 && countByModel[name] > 0 {
+			durationSec := float64(aggregated.SimEndedTime) / 1e6
+			mm.ThroughputRPS = float64(countByModel[name]) / durationSec
+		}
+		result[name] = mm
+	}
+	return result
+}
+
 // ParseFitnessWeights parses a "key:value,key:value" string into a weight map.
 // Returns empty map for empty input (EC-2). Returns error for malformed entries.
 func ParseFitnessWeights(s string) (map[string]float64, error) {

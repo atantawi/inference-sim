@@ -863,6 +863,8 @@
       
         
       
+        
+      
     
     
     
@@ -1150,6 +1152,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../guide/observe-replay-calibrate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observe / Replay / Calibrate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../guide/experimentation/" class="md-nav__link">
         
   
@@ -1225,6 +1255,8 @@
       
         
       
+        
+      
     
     
     
@@ -1279,6 +1311,34 @@
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/project-structure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
               
             
               
@@ -1845,7 +1905,7 @@
   <span class="md-ellipsis">
     
   
-    Antipattern Rules (R1-R20)
+    Antipattern Rules (R1-R23)
   
 
     
@@ -1873,7 +1933,7 @@
   <span class="md-ellipsis">
     
   
-    System Invariants (INV-1-8)
+    System Invariants (INV-1-INV-11)
   
 
     
@@ -3683,6 +3743,10 @@
 <li><strong>Phase structure</strong>: Verify that prefill time ∝ prompt tokens and decode time ∝ output tokens by fitting linear models and checking R² &gt; 0.95. <strong>In BLIS terms:</strong> prefill time ≈ TTFT (time to first token); decode time ≈ E2E - TTFT. Vary <code>input_distribution</code> mean while holding <code>output_distribution</code> constant, and vice versa.</li>
 <li><strong>Replay validation</strong>: Compare BLIS simulation output against real inference server traces (e.g., vLLM experiment logs). This tests system composition — whether the simulator's component interactions produce realistic end-to-end behavior — which analytical evaluation of individual components cannot. <strong>Caveat (T_queue_obs masking):</strong> Analytical evaluation that substitutes real observed queue waits into the prediction formula (e.g., <code>TTFT_pred = α(pre-scheduling overhead) + T_queue_obs + T_prefill_pred</code>) never tests queueing prediction. At saturation, T_queue dominates (~120s), making the &lt;0.02% coefficient error an artifact of masking, not evidence of good coefficients. Only full BLIS replay tests the complete prediction pipeline. <strong>In BLIS terms:</strong> Use <code>blis convert inference-perf</code> to convert real experiment specs (verify <code>enable_multi_turn_chat</code> semantics match between the real server config and BLIS conversion — see #517), then compare BLIS metrics (TTFT, E2E, throughput) against real server metrics at matching operating points. H30-H32 established this pattern, finding that both crossmodel and blackbox backends show identical TTFT underprediction — -17% to -56% depending on model and workload profile, all at sub-saturation; at actual saturation, regime transition amplification produces 2000x divergence — proving the gap is in the scheduling model (zero inter-step overhead), not coefficient accuracy.</li>
 </ul>
+<div class="admonition tip">
+<p class="admonition-title">Parameter resolution</p>
+<p>Experiment setup errors often stem from parameter precedence confusion — e.g., CLI defaults overriding intended workload values (#390), or <code>--rate</code> being ignored when <code>--workload-spec</code> is set. See <a href="../../../reference/configuration/#common-pitfalls">Common Pitfalls</a> and <a href="../../../reference/configuration/#known-unit-gotchas">Known Unit Gotchas</a> in the Configuration Reference.</p>
+</div>
 <h2 id="experiment-classification">Experiment Classification<a class="headerlink" href="#experiment-classification" title="Permanent link">&para;</a></h2>
 <p>Every hypothesis must be classified before designing the experiment. The classification determines rigor requirements.</p>
 <h3 id="type-1-deterministic-experiments">Type 1: Deterministic Experiments<a class="headerlink" href="#type-1-deterministic-experiments" title="Permanent link">&para;</a></h3>
@@ -4222,7 +4286,7 @@
 <p>This audit is what makes experiments a feedback loop into the standards. Example: H3 confirmed that the llm-d default config is robust (confirmation) AND revealed that KV utilization is stale at high rates (design limitation -&gt; new rule R17 + new invariant INV-7 + 3 issues).</p>
 <hr />
 <h2 id="experiment-artifacts">Experiment Artifacts<a class="headerlink" href="#experiment-artifacts" title="Permanent link">&para;</a></h2>
-<p>Each hypothesis experiment lives in <code>hypotheses/&lt;name&gt;/</code> with:</p>
+<p>Each hypothesis experiment lives in <code>hypotheses/&lt;name&gt;/</code> within its feature branch with:</p>
 <table>
 <thead>
 <tr>
@@ -4250,6 +4314,7 @@
 </tbody>
 </table>
 <p>Scripts must be reproducible — running <code>./run.sh</code> on the same commit produces deterministic output.</p>
+<p><strong>Artifact lifecycle:</strong> Experiment artifacts are not merged to <code>main</code>. They stay in the feature branch; the PR itself is the permanent, linkable record. Completed experiments are collected in the <a href="https://github.com/inference-sim/inference-sim/tree/hypothesis-archive"><code>hypothesis-archive</code> branch</a>.</p>
 
 
 

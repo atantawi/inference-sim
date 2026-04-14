@@ -47,6 +47,8 @@
       
     
     
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
     <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
@@ -2372,6 +2374,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -2428,6 +2434,36 @@
   
   
     <li class="md-nav__item">
+      <a href="../../blog/category/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    
+  
+  
+    <li class="md-nav__item">
       <a href="../../blog/category/capacity-planning/" class="md-nav__link">
         
   
@@ -2436,6 +2472,36 @@
     
   
     Capacity Planning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blog/category/deep-dives/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deep Dives
   
 
     
@@ -2641,7 +2707,7 @@
 </table>
 <div class="admonition info">
 <p class="admonition-title">Reconciling with BLIS Defaults</p>
-<p>The current BLIS default is <code>prefix-affinity:3,queue-depth:2,kv-utilization:2</code> (llm-d parity). Strategy Evolution discovered that <code>pa:4,qd:3</code> (no kv-util) performs better under KV pressure and at high load with admission control. The default is maintained for compatibility with the llm-d ecosystem. Users running Strategy Evolution experiments should consider the regime-dependent recommendation in RP-7 rather than assuming the default is optimal for all scenarios.</p>
+<p>The current BLIS default is <code>precise-prefix-cache:2,queue-depth:1,kv-utilization:1</code> (llm-d parity). Strategy Evolution discovered that <code>pa:4,qd:3</code> (no kv-util) performs better under KV pressure and at high load with admission control. The default is maintained for compatibility with the llm-d ecosystem. Users running Strategy Evolution experiments should consider the regime-dependent recommendation in RP-7 rather than assuming the default is optimal for all scenarios.</p>
 </div>
 <table>
 <thead>
@@ -2679,9 +2745,9 @@
 </tr>
 <tr>
 <td>RP-12</td>
-<td><strong>Staleness immunity comes from signal independence</strong> — PA reads synchronous PrefixCacheIndex, QD reads Immediate EffectiveLoad</td>
+<td><strong>Staleness immunity comes from signal independence</strong> — PA reads synchronous PrefixCacheIndex, QD reads QueueDepth (Periodic when interval&gt;0). Quantitative claims measured pre-#955 when QD read EffectiveLoad (included synchronous InFlightRequests); re-verification pending.</td>
 <td>Iter 16</td>
-<td><code>pa:3,qd:2</code> produced identical 65.45ms across all staleness levels and KV pressures</td>
+<td><code>pa:3,qd:2</code> produced identical 65.45ms across all staleness levels and KV pressures (pre-#955 EffectiveLoad behavior)</td>
 </tr>
 <tr>
 <td>RP-13</td>
@@ -2882,6 +2948,12 @@
     
     
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mermaid-text-fix.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       
     
   </body>

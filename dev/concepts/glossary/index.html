@@ -51,6 +51,8 @@
       
     
     
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
     <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
@@ -2890,6 +2892,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -2946,6 +2952,36 @@
   
   
     <li class="md-nav__item">
+      <a href="../../blog/category/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    
+  
+  
+    <li class="md-nav__item">
       <a href="../../blog/category/capacity-planning/" class="md-nav__link">
         
   
@@ -2954,6 +2990,36 @@
     
   
     Capacity Planning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blog/category/deep-dives/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deep Dives
   
 
     
@@ -3560,7 +3626,7 @@
 <h3 id="kv-cache">KV Cache<a class="headerlink" href="#kv-cache" title="Permanent link">&para;</a></h3>
 <p>GPU memory organized as blocks that store key-value tensors computed during attention. BLIS simulates block allocation, prefix sharing, LRU eviction, and optional CPU offloading without actual GPU memory. See <a href="../core-engine/#kv-cache-management">Core Engine: KV Cache</a>.</p>
 <h3 id="latency-model">Latency Model<a class="headerlink" href="#latency-model" title="Permanent link">&para;</a></h3>
-<p>The component that predicts GPU execution time for a batch step. Four modes: <em>Roofline</em> (default; analytical FLOPs/bandwidth estimation), <em>Blackbox</em> (trained regression coefficients), <em>Cross-Model</em> (physics-informed, MoE-aware), and <em>Trained-Roofline</em> (roofline basis functions × learned corrections from real vLLM traces). See <a href="../core-engine/#latency-models">Core Engine: Latency Models</a>, <a href="../roofline/">Roofline Estimation</a>, and <a href="../../guide/latency-models/">Latency Models Guide</a>.</p>
+<p>The component that predicts GPU execution time for a batch step. Five modes: <em>Roofline</em> (default; analytical FLOPs/bandwidth estimation), <em>Blackbox</em> (trained regression coefficients), <em>Cross-Model</em> (physics-informed, MoE-aware), <em>Trained-Roofline</em> (roofline basis functions × learned corrections from real vLLM traces), and <em>Trained-Physics</em> (physics-informed basis functions with architecture-aware MoE scaling). See <a href="../core-engine/#latency-models">Core Engine: Latency Models</a>, <a href="../roofline/">Roofline Estimation</a>, and <a href="../../guide/latency-models/">Latency Models Guide</a>.</p>
 <h3 id="maxmodellen">MaxModelLen<a class="headerlink" href="#maxmodellen" title="Permanent link">&para;</a></h3>
 <p>Maximum total sequence length (input + output) for a single request, in tokens. Mirrors vLLM's <code>--max-model-len</code>. When set (&gt; 0), requests whose input alone fills the context window (<code>input &gt;= MaxModelLen</code>) or whose input + output budget exceeds it are dropped before entering the wait queue. A three-part proactive cap matches vLLM <code>scheduler.py:773-774</code>: FormBatch clamps token scheduling to <code>maxModelLen - 1 - ProgressIndex</code>, executeBatchStep skips decode when 0 tokens allocated, and processCompletions force-completes at the <code>maxModelLen - 1</code> boundary. Output per length-capped request: <code>maxModelLen - 1 - inputLen</code>. Set to 0 for unlimited. Auto-derived from <code>max_position_embeddings</code> in roofline/crossmodel modes, with <code>rope_scaling</code> factor application and KV-feasible capping. See <a href="../../reference/configuration/#simulation-control">Configuration Reference</a>.</p>
 <h3 id="observe-replay-calibrate-pipeline">Observe / Replay / Calibrate Pipeline<a class="headerlink" href="#observe-replay-calibrate-pipeline" title="Permanent link">&para;</a></h3>
@@ -3588,7 +3654,7 @@
 <h3 id="routing-snapshot">Routing Snapshot<a class="headerlink" href="#routing-snapshot" title="Permanent link">&para;</a></h3>
 <p>A point-in-time view of instance state used for routing decisions. Contains queue depth, batch size, KV utilization, cache hit rate, and pending request count. Signals have different freshness tiers depending on how they're collected. See <a href="../architecture/#signal-freshness">Cluster Architecture: Signal Freshness</a>.</p>
 <h3 id="scorer">Scorer<a class="headerlink" href="#scorer" title="Permanent link">&para;</a></h3>
-<p>A component in the weighted scoring pipeline that produces a per-instance score in [0, 1] for a specific signal dimension. Built-in scorers: <code>prefix-affinity</code>, <code>queue-depth</code>, <code>kv-utilization</code>, <code>load-balance</code>. Scores are multiplied by weights and summed. See <a href="../architecture/#scorer-composition">Cluster Architecture: Scorer Composition</a>.</p>
+<p>A component in the weighted scoring pipeline that produces a per-instance score in [0, 1] for a specific signal dimension. Built-in scorers: <code>precise-prefix-cache</code>, <code>prefix-affinity</code>, <code>no-hit-lru</code>, <code>queue-depth</code>, <code>kv-utilization</code>, <code>load-balance</code>, <code>active-requests</code>, <code>running-requests</code>, <code>load-aware</code>. Most scorers produce scores in [0, 1]; <code>load-aware</code> uses [0, 0.5] per llm-d semantics. Scores are multiplied by weights and summed. See <a href="../architecture/#scorer-composition">Cluster Architecture: Scorer Composition</a>.</p>
 <h3 id="seed">Seed<a class="headerlink" href="#seed" title="Permanent link">&para;</a></h3>
 <p>The random seed for deterministic simulation. Same seed produces byte-identical stdout across runs (INV-6). BLIS uses partitioned RNG to isolate randomness across subsystems. See <a href="../../reference/configuration/#simulation-control">Configuration Reference</a>.</p>
 <h3 id="step">Step<a class="headerlink" href="#step" title="Permanent link">&para;</a></h3>
@@ -3706,6 +3772,12 @@
     
     
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mermaid-text-fix.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       
     
   </body>

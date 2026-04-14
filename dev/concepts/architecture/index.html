@@ -51,6 +51,8 @@
       
     
     
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
     <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
@@ -2667,6 +2669,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -2723,6 +2729,36 @@
   
   
     <li class="md-nav__item">
+      <a href="../../blog/category/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    
+  
+  
+    <li class="md-nav__item">
       <a href="../../blog/category/capacity-planning/" class="md-nav__link">
         
   
@@ -2731,6 +2767,36 @@
     
   
     Capacity Planning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    
+  
+  
+    <li class="md-nav__item">
+      <a href="../../blog/category/deep-dives/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deep Dives
   
 
     
@@ -3085,7 +3151,7 @@
     WG["Workload&lt;br/&gt;Generator"] --&gt;|Requests| Adm{"Admission&lt;br/&gt;Policy"}
     Adm --&gt;|rejected| Rej["Rejected&lt;br/&gt;(counted)"]
     Adm --&gt;|admitted| GQ["Gateway Queue&lt;br/&gt;(opt: --flow-control)"]
-    GQ --&gt;|dispatch| Rtr["Routing Policy&lt;br/&gt;(WeightedScoring)&lt;br/&gt;PA:3 QD:2 KV:2"]
+    GQ --&gt;|dispatch| Rtr["Routing Policy&lt;br/&gt;(WeightedScoring)&lt;br/&gt;PPC:2 QD:1 KV:1"]
 
     style GQ fill:#e7f5ff,stroke:#90caf9
 
@@ -3155,12 +3221,22 @@
 <td>Rate-limiting via a token bucket with configurable capacity and refill rate</td>
 </tr>
 <tr>
+<td><code>tier-shed</code></td>
+<td>SLO-aware shedding: rejects low-priority tiers under overload (configurable threshold)</td>
+</tr>
+<tr>
+<td><code>gaie-legacy</code></td>
+<td>Production llm-d/GAIE parity: saturation-based shedding of sheddable requests (priority &lt; 0)</td>
+</tr>
+<tr>
 <td><code>reject-all</code></td>
 <td>Reject all requests (for pathological testing)</td>
 </tr>
 </tbody>
 </table>
 <p><strong>Token bucket</strong> rate-limits by consuming tokens proportional to input length: each request consumes tokens equal to its input token count, tokens refill at a constant rate, and requests are rejected when the bucket has insufficient tokens. Capacity and refill rate are configured via <code>--token-bucket-capacity</code> and <code>--token-bucket-refill-rate</code>.</p>
+<p><strong>Tier-shed</strong> rejects requests whose SLO tier priority falls below a configurable <code>tier_shed_min_priority</code> when any instance's effective load exceeds <code>tier_shed_threshold</code>. Non-sheddable tiers (critical, standard) are protected.</p>
+<p><strong>GAIE-legacy</strong> replicates the saturation-based admission from production llm-d's Gateway API Inference Extension. It computes pool-average saturation as <code>avg(max(qd/qdThreshold, kv/kvThreshold))</code> across instances. Non-sheddable requests (priority &gt;= 0) always pass; sheddable requests are rejected when saturation &gt;= 1.0. Defaults match GAIE production: <code>qdThreshold=5</code>, <code>kvThreshold=0.8</code>. See the <a href="../../guide/admission/#gaie-legacy-admission">Admission Guide</a> for details.</p>
 <p>Rejected requests are counted in the output metrics but do not enter the routing pipeline. To add a new admission policy, see <a href="../../contributing/extension-recipes/">Extension Recipes</a>. See <a href="../../reference/configuration/#admission-policy">Configuration Reference</a> for flag details.</p>
 <h2 id="routing-pipeline">Routing Pipeline<a class="headerlink" href="#routing-pipeline" title="Permanent link">&para;</a></h2>
 <p>Routing selects which instance receives an admitted request. The routing policy sees a <code>RouterState</code> containing routing snapshots for all instances and the current simulation clock.</p>
@@ -3198,31 +3274,28 @@
 <li><strong>Sum:</strong> Weighted scores are summed across scorers for each instance</li>
 <li><strong>Select:</strong> The instance with the highest total score is chosen (argmax)</li>
 </ol>
-<p>Default weights: <code>prefix-affinity:3, queue-depth:2, kv-utilization:2</code> (llm-d parity). Note: weights are normalized to sum to 1.0 before scoring, so only weight ratios matter — <code>prefix-affinity:3,queue-depth:2</code> is identical to <code>prefix-affinity:30,queue-depth:20</code>. To add a new scorer, see <a href="../../contributing/extension-recipes/">Extension Recipes</a>.</p>
+<p>Default weights: <code>precise-prefix-cache:2, queue-depth:1, kv-utilization:1</code> (llm-d parity). Note: weights are normalized to sum to 1.0 before scoring, so only weight ratios matter — <code>precise-prefix-cache:2,queue-depth:1</code> is identical to <code>precise-prefix-cache:20,queue-depth:10</code>. To add a new scorer, see <a href="../../contributing/extension-recipes/">Extension Recipes</a>.</p>
 <pre class="mermaid"><code>flowchart TD
     Req["Request&lt;br/&gt;+ Input Tokens"] --&gt; S1
     Snap["Routing Snapshots&lt;br/&gt;(per instance)&lt;br/&gt;QD, BS, KVUtil"] --&gt; S2
     Snap --&gt; S3
 
-    S1["prefix-affinity&lt;br/&gt;(prefix overlap proportion)"] --&gt; W1["× weight (3)"]
-    S2["queue-depth&lt;br/&gt;(min-max norm of load)"] --&gt; W2["× weight (2)"]
-    S3["kv-utilization&lt;br/&gt;(1 − KVUtilization)"] --&gt; W3["× weight (2)"]
+    S1["precise-prefix-cache&lt;br/&gt;(KV cache state query, min-max norm)"] --&gt; W1["× weight (2)"]
+    S2["queue-depth&lt;br/&gt;(min-max norm of load)"] --&gt; W2["× weight (1)"]
+    S3["kv-utilization&lt;br/&gt;(1 − KVUtilization)"] --&gt; W3["× weight (1)"]
 
-    W1 --&gt; Sum["Weighted Sum&lt;br/&gt;(per instance)&lt;br/&gt;3×PA + 2×QD + 2×KV"]
+    W1 --&gt; Sum["Weighted Sum&lt;br/&gt;(per instance)&lt;br/&gt;2×PPC + 1×QD + 1×KV"]
     W2 --&gt; Sum
     W3 --&gt; Sum
 
     Sum --&gt; Sel["Argmax&lt;br/&gt;→ Selected Instance"]
-    Sel --&gt;|observer callback| Obs["Update prefix&lt;br/&gt;cache index"]
-    Obs -.-&gt;|stateful feedback| S1
 
     style Req fill:#a5d8ff
     style Snap fill:#e7f5ff
     style S1 fill:#fff3e0
     style S2 fill:#fff3e0
     style S3 fill:#fff3e0
-    style Sel fill:#c8e6c9
-    style Obs fill:#ffecb3</code></pre>
+    style Sel fill:#c8e6c9</code></pre>
 <h2 id="scorer-composition">Scorer Composition<a class="headerlink" href="#scorer-composition" title="Permanent link">&para;</a></h2>
 <p>Scorers are the building blocks of the weighted routing policy. Each scorer evaluates one signal dimension across all instances.</p>
 <h3 id="built-in-scorers">Built-in Scorers<a class="headerlink" href="#built-in-scorers" title="Permanent link">&para;</a></h3>
@@ -3243,9 +3316,21 @@
 <td>Stateful: updates cache index after routing via observer</td>
 </tr>
 <tr>
+<td><code>precise-prefix-cache</code></td>
+<td>Actual KV cache state</td>
+<td>Min-max normalization of cached prefix block count per instance; all-equal (including all-zero) → 1.0 (llm-d parity)</td>
+<td>Stateless: queries instance KV cache directly via <code>CacheQueryFn</code></td>
+</tr>
+<tr>
+<td><code>no-hit-lru</code></td>
+<td>Routing history</td>
+<td>Cold requests (zero cache hits): LRU positional scoring; warm requests: neutral 0.5</td>
+<td>Stateful: observer tracks LRU order on cold routing only</td>
+</tr>
+<tr>
 <td><code>queue-depth</code></td>
-<td>Instance load</td>
-<td>Min-max normalization of effective load (lower load = higher score)</td>
+<td>Queue depth</td>
+<td>Min-max normalization of QueueDepth (lower depth = higher score)</td>
 <td>Stateless</td>
 </tr>
 <tr>
@@ -3260,10 +3345,28 @@
 <td><code>1 / (1 + EffectiveLoad)</code> (decreasing function of load)</td>
 <td>Stateless</td>
 </tr>
+<tr>
+<td><code>active-requests</code></td>
+<td>In-flight requests</td>
+<td><code>(maxCount - count) / maxCount</code> (zero in-flight = 1.0; all equal non-zero = 0.0)</td>
+<td>Stateless</td>
+</tr>
+<tr>
+<td><code>running-requests</code></td>
+<td>Batch size</td>
+<td>Min-max normalization of BatchSize (lower batch = higher score)</td>
+<td>Stateless</td>
+</tr>
+<tr>
+<td><code>load-aware</code></td>
+<td>Queue depth</td>
+<td><code>0.5 * (1 - QueueDepth/128)</code> clamped at threshold; score range [0, 0.5]</td>
+<td>Stateless</td>
+</tr>
 </tbody>
 </table>
 <h3 id="stateful-vs-stateless-scorers">Stateful vs. Stateless Scorers<a class="headerlink" href="#stateful-vs-stateless-scorers" title="Permanent link">&para;</a></h3>
-<p>Most scorers are <strong>stateless</strong> — they compute scores purely from the current routing snapshot. The <code>prefix-affinity</code> scorer is <strong>stateful</strong>: after a routing decision, an observer callback updates the router-side prefix cache index with the routed request's block hashes. This enables the scorer to track which prefixes are cached at which instance without querying the actual per-instance KV caches.</p>
+<p>Most scorers are <strong>stateless</strong> — they compute scores purely from the current routing snapshot. Two scorers are <strong>stateful</strong>: <code>prefix-affinity</code> updates its router-side prefix cache index after each routing decision via an observer callback, and <code>no-hit-lru</code> tracks LRU ordering of cold request routing to distribute cache-miss traffic. The <code>precise-prefix-cache</code> scorer queries actual instance KV cache state directly (via <code>CacheQueryFn</code>) rather than maintaining a router-side approximation.</p>
 <h3 id="router-side-prefix-cache-index">Router-Side Prefix Cache Index<a class="headerlink" href="#router-side-prefix-cache-index" title="Permanent link">&para;</a></h3>
 <p>The prefix-affinity scorer maintains a lightweight approximate cache of per-instance block hash history. This is separate from the actual per-instance KV cache and serves as a routing-time estimate of cache hit probability.</p>
 <p>Key properties:
@@ -3499,6 +3602,12 @@
     
     
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mermaid-text-fix.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       
     
   </body>

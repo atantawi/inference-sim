@@ -1385,7 +1385,7 @@
   <span class="md-ellipsis">
     
   
-    Supported Models
+    Model Compatibility
   
 
     
@@ -1935,7 +1935,7 @@
   <span class="md-ellipsis">
     
   
-    System Invariants (INV-1-INV-11)
+    System Invariants (INV-1-INV-13)
   
 
     
@@ -3756,7 +3756,7 @@
 <td><strong>Validation</strong></td>
 <td>Does the model match expected system behavior?</td>
 <td>Statistical comparison against analytical baselines or real data within a pre-specified accuracy interval.</td>
-<td>Cross-validation against M/M/k; H19 (roofline vs blackbox)</td>
+<td>Cross-validation against M/M/k</td>
 </tr>
 <tr>
 <td><strong>Uncertainty Quantification</strong></td>
@@ -3807,7 +3807,7 @@
 <li><strong>M/M/k baseline</strong>: <a href="https://en.wikipedia.org/wiki/M/M/c_queue">M/M/k</a> is the standard queueing model with Markovian (Poisson) arrivals, Markovian (exponential) service times, and k servers. Under matching assumptions, compare DES queue length distribution against the M/M/k analytical solution. <strong>Caveat:</strong> BLIS uses batching and deterministic service times (alpha/beta coefficients), so exact M/M/k matching is not possible. The comparison requires configuring BLIS with <code>--max-batch-size 1</code> and interpreting the service time distribution as approximately exponential. Divergence may indicate modeling errors OR fundamental architectural differences from M/M/k assumptions.</li>
 <li><strong>Little's Law</strong>: For any stable configuration, verify L = λW (average queue length = arrival rate × average wait time). This is a universal law that must hold. <strong>In BLIS terms:</strong> L = mean <code>still_queued</code> from per-instance metrics; λ = <code>injected_requests / (sim_duration_us / 1e6)</code>; W = mean scheduling delay from <code>scheduling_delay_p99_ms</code> (approximate). Extract from JSON output.</li>
 <li><strong>Phase structure</strong>: Verify that prefill time ∝ prompt tokens and decode time ∝ output tokens by fitting linear models and checking R² &gt; 0.95. <strong>In BLIS terms:</strong> prefill time ≈ TTFT (time to first token); decode time ≈ E2E - TTFT. Vary <code>input_distribution</code> mean while holding <code>output_distribution</code> constant, and vice versa.</li>
-<li><strong>Replay validation</strong>: Compare BLIS simulation output against real inference server traces (e.g., vLLM experiment logs). This tests system composition — whether the simulator's component interactions produce realistic end-to-end behavior — which analytical evaluation of individual components cannot. <strong>Caveat (T_queue_obs masking):</strong> Analytical evaluation that substitutes real observed queue waits into the prediction formula (e.g., <code>TTFT_pred = α(pre-scheduling overhead) + T_queue_obs + T_prefill_pred</code>) never tests queueing prediction. At saturation, T_queue dominates (~120s), making the &lt;0.02% coefficient error an artifact of masking, not evidence of good coefficients. Only full BLIS replay tests the complete prediction pipeline. <strong>In BLIS terms:</strong> Use <code>blis convert inference-perf</code> to convert real experiment specs (verify <code>enable_multi_turn_chat</code> semantics match between the real server config and BLIS conversion — see #517), then compare BLIS metrics (TTFT, E2E, throughput) against real server metrics at matching operating points. H30-H32 established this pattern, finding that both crossmodel and blackbox backends show identical TTFT underprediction — -17% to -56% depending on model and workload profile, all at sub-saturation; at actual saturation, regime transition amplification produces 2000x divergence — proving the gap is in the scheduling model (zero inter-step overhead), not coefficient accuracy.</li>
+<li><strong>Replay validation</strong>: Compare BLIS simulation output against real inference server traces (e.g., vLLM experiment logs). This tests system composition — whether the simulator's component interactions produce realistic end-to-end behavior — which analytical evaluation of individual components cannot. <strong>Caveat (T_queue_obs masking):</strong> Analytical evaluation that substitutes real observed queue waits into the prediction formula (e.g., <code>TTFT_pred = α(pre-scheduling overhead) + T_queue_obs + T_prefill_pred</code>) never tests queueing prediction. At saturation, T_queue dominates (~120s), making the &lt;0.02% coefficient error an artifact of masking, not evidence of good coefficients. Only full BLIS replay tests the complete prediction pipeline. <strong>In BLIS terms:</strong> Use <code>blis convert inference-perf</code> to convert real experiment specs (verify <code>enable_multi_turn_chat</code> semantics match between the real server config and BLIS conversion — see #517), then compare BLIS metrics (TTFT, E2E, throughput) against real server metrics at matching operating points. H30-H32 established this pattern, finding that both roofline-based and data-driven backends show identical TTFT underprediction — -17% to -56% depending on model and workload profile, all at sub-saturation; at actual saturation, regime transition amplification produces 2000x divergence — proving the gap is in the scheduling model (zero inter-step overhead), not coefficient accuracy.</li>
 </ul>
 <div class="admonition tip">
 <p class="admonition-title">Parameter resolution</p>
@@ -3955,7 +3955,7 @@
 <tr>
 <td><strong>Scheduler invariants</strong></td>
 <td>"For ALL configurations C, invariant I holds at simulation end"</td>
-<td>"For all routing × scheduling × admission combinations, injected == completed + queued + running"</td>
+<td>"For all routing × scheduling × admission combinations, injected == completed + still_queued + still_running + dropped_unservable + timed_out (+ gateway/routing/encode buckets for cluster runs)"</td>
 </tr>
 <tr>
 <td><strong>Performance-regime</strong></td>
@@ -4002,7 +4002,7 @@
 </tr>
 <tr>
 <td>Scheduler invariants</td>
-<td><strong>Primary</strong> (INV-1 through INV-6)</td>
+<td><strong>Primary</strong> (INV-1–INV-3, INV-5, INV-6, INV-10, INV-13)</td>
 <td>—</td>
 <td>—</td>
 <td>—</td>
@@ -4063,17 +4063,17 @@
 <tbody>
 <tr>
 <td>Scheduler invariants</td>
-<td>INV-1 (conservation), INV-2 (lifecycle), INV-3 (clock monotonicity), INV-5 (causality), INV-6 (determinism)</td>
+<td>INV-1 (conservation), INV-2 (lifecycle), INV-3 (clock monotonicity), INV-5 (causality), INV-6 (determinism), INV-10 (session causality), INV-13 (run/replay parity)</td>
 <td>R1 (no silent data loss), R5 (transactional mutation), R21 (mutable slice iteration)</td>
 </tr>
 <tr>
 <td>Performance-regime</td>
-<td>INV-8 (work-conserving)</td>
+<td>— (uses scaling curves, not a dedicated invariant)</td>
 <td>—</td>
 </tr>
 <tr>
 <td>Structural model</td>
-<td>INV-4 (KV conservation), INV-7 (signal freshness)</td>
+<td>INV-4 (KV conservation), INV-7 (signal freshness), INV-8 (work-conserving), INV-9 (oracle knowledge boundary), INV-11 (session completeness), INV-12 (Phase 1 completeness), plus PD disaggregation INV-PD-<em> / pool INV-P2-</em></td>
 <td>R2 (sort map keys), R11 (guard division), R17 (signal freshness), R22 (pre-check consistency)</td>
 </tr>
 <tr>

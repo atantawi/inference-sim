@@ -1496,7 +1496,7 @@
   <span class="md-ellipsis">
     
   
-    Supported Models
+    Model Compatibility
   
 
     
@@ -2040,7 +2040,7 @@
   <span class="md-ellipsis">
     
   
-    System Invariants (INV-1-INV-11)
+    System Invariants (INV-1-INV-13)
   
 
     
@@ -2792,10 +2792,10 @@
 <h2 id="single-instance-simulation">Single-Instance Simulation<a class="headerlink" href="#single-instance-simulation" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>./blis<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>qwen/qwen3-14b
 </code></pre></div>
-<p>This runs 100 requests through a single inference instance using roofline mode (analytical estimation) for Qwen3 14B on an H100 GPU with TP=1.</p>
+<p>This runs 100 requests through a single inference instance using the default trained-physics latency model for Qwen3 14B on an H100 GPU with TP=1.</p>
 <div class="admonition note">
 <p class="admonition-title">First-run HuggingFace fetch</p>
-<p>On first use, BLIS auto-fetches the model's <code>config.json</code> from HuggingFace (~1 second for public models). Subsequent runs use the cached config in <code>model_configs/</code>. If you are offline, use <code>--latency-model blackbox</code> instead (no network needed).</p>
+<p>On first use, BLIS auto-fetches the model's <code>config.json</code> from HuggingFace (~1 second for public models). Subsequent runs use the cached config in <code>model_configs/</code>. For air-gapped environments, pre-populate <code>model_configs/&lt;model&gt;/config.json</code> and use <code>--model-config-folder</code>.</p>
 </div>
 <h3 id="reading-the-output">Reading the Output<a class="headerlink" href="#reading-the-output" title="Permanent link">&para;</a></h3>
 <p>BLIS prints diagnostic logs to stderr and results to stdout. You'll see log lines (prefixed with <code>INFO</code> or <code>WARN</code>) followed by a <code>=== Simulation Metrics ===</code> header and pretty-printed JSON:</p>
@@ -2899,9 +2899,9 @@
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">  </span>--num-instances<span class="w"> </span><span class="m">4</span><span class="w"> </span>--rate<span class="w"> </span><span class="m">100</span><span class="w"> </span>--num-requests<span class="w"> </span><span class="m">500</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">  </span>--trace-level<span class="w"> </span>decisions<span class="w"> </span>--summarize-trace
 <a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="c1"># With trained-roofline mode (recommended for new models, 7% MAPE)</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="c1"># With trained-physics mode (recommended for new models)</span>
 <a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>./blis<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>qwen/qwen3-14b<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">  </span>--latency-model<span class="w"> </span>trained-roofline<span class="w"> </span>--hardware<span class="w"> </span>H100<span class="w"> </span>--tp<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">  </span>--latency-model<span class="w"> </span>trained-physics<span class="w"> </span>--hardware<span class="w"> </span>H100<span class="w"> </span>--tp<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">  </span>--num-instances<span class="w"> </span><span class="m">4</span><span class="w"> </span>--rate<span class="w"> </span><span class="m">100</span><span class="w"> </span>--num-requests<span class="w"> </span><span class="m">500</span>
 <a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>
 <a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="c1"># With pure roofline mode (analytical, no learned corrections)</span>

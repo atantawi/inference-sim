@@ -120,21 +120,21 @@ type DeploymentConfig struct {
 	// Flow control configuration (issue #882, GIE parity).
 	// When FlowControlEnabled is false (default), the gateway queue is bypassed
 	// and requests flow directly from admission to routing (BC-1 pass-through).
-	FlowControlEnabled              bool    `yaml:"flow_control_enabled,omitempty"`
-	FlowControlDetector             string  `yaml:"flow_control_detector,omitempty"`                // "never" (default), "utilization", "concurrency"
-	FlowControlDispatchOrder        string           `yaml:"flow_control_dispatch_order,omitempty"`  // "fifo" (default), "priority", "slo-deadline"
-	FlowControlSLOTargets           map[string]int64 `yaml:"flow_control_slo_targets,omitempty"`     // SLO class → TTFT target µs for slo-deadline ordering
-	FlowControlMaxQueueDepth        int              `yaml:"flow_control_max_queue_depth,omitempty"` // 0 = unlimited
-	FlowControlQueueDepthThreshold  float64 `yaml:"flow_control_queue_depth_threshold,omitempty"`   // for utilization detector
-	FlowControlKVCacheUtilThreshold float64 `yaml:"flow_control_kv_cache_util_threshold,omitempty"` // for utilization detector
-	FlowControlMaxConcurrency       int     `yaml:"flow_control_max_concurrency,omitempty"`         // for concurrency detector
-	FlowControlPerBandCapacity      int     `yaml:"flow_control_per_band_capacity,omitempty"`       // 0 = unlimited; max requests per priority band
-	FlowControlUsageLimitThreshold  float64 `yaml:"flow_control_usage_limit_threshold,omitempty"`   // per-band HoL blocking ceiling (1.0=no HoL, <1.0 gates lower bands earlier)
-	FlowControlFairnessPolicy       string  `yaml:"flow_control_fairness_policy,omitempty"`         // "global-strict" (default), "round-robin"
-	FlowControlRequestTTL           int64   `yaml:"flow_control_request_ttl,omitempty"`             // microseconds; 0 = disabled (default). GIE parity: DefaultRequestTTL.
-	FlowControlQueueShedding        bool    `yaml:"flow_control_queue_shedding,omitempty"`          // BLIS-extra: cross-band shedding on full queue (not in llm-d). Default false.
-	FlowControlDispatchTickInterval int64   `yaml:"flow_control_dispatch_tick_interval,omitempty"`  // µs between periodic dispatch ticks (default 1000 = 1ms, llm-d parity). 0 = use default.
-	FlowControlInFlightEviction     bool    `yaml:"flow_control_in_flight_eviction,omitempty"`      // BLIS-extra: evict sheddable in-flight requests when saturated (not in llm-d). Default false.
+	FlowControlEnabled              bool             `yaml:"flow_control_enabled,omitempty"`
+	FlowControlDetector             string           `yaml:"flow_control_detector,omitempty"`                // "never" (default), "utilization", "concurrency"
+	FlowControlDispatchOrder        string           `yaml:"flow_control_dispatch_order,omitempty"`          // "fifo" (default), "priority", "slo-deadline"
+	FlowControlSLOTargets           map[string]int64 `yaml:"flow_control_slo_targets,omitempty"`             // SLO class → TTFT target µs for slo-deadline ordering
+	FlowControlMaxQueueDepth        int              `yaml:"flow_control_max_queue_depth,omitempty"`         // 0 = unlimited
+	FlowControlQueueDepthThreshold  float64          `yaml:"flow_control_queue_depth_threshold,omitempty"`   // for utilization detector
+	FlowControlKVCacheUtilThreshold float64          `yaml:"flow_control_kv_cache_util_threshold,omitempty"` // for utilization detector
+	FlowControlMaxConcurrency       int              `yaml:"flow_control_max_concurrency,omitempty"`         // for concurrency detector
+	FlowControlPerBandCapacity      int              `yaml:"flow_control_per_band_capacity,omitempty"`       // 0 = unlimited; max requests per priority band
+	FlowControlUsageLimitThreshold  float64          `yaml:"flow_control_usage_limit_threshold,omitempty"`   // per-band HoL blocking ceiling (1.0=no HoL, <1.0 gates lower bands earlier)
+	FlowControlFairnessPolicy       string           `yaml:"flow_control_fairness_policy,omitempty"`         // "global-strict" (default), "round-robin"
+	FlowControlRequestTTL           int64            `yaml:"flow_control_request_ttl,omitempty"`             // microseconds; 0 = disabled (default). GIE parity: DefaultRequestTTL.
+	FlowControlQueueShedding        bool             `yaml:"flow_control_queue_shedding,omitempty"`          // BLIS-extra: cross-band shedding on full queue (not in llm-d). Default false.
+	FlowControlDispatchTickInterval int64            `yaml:"flow_control_dispatch_tick_interval,omitempty"`  // µs between periodic dispatch ticks (default 1000 = 1ms, llm-d parity). 0 = use default.
+	FlowControlInFlightEviction     bool             `yaml:"flow_control_in_flight_eviction,omitempty"`      // BLIS-extra: evict sheddable in-flight requests when saturated (not in llm-d). Default false.
 
 	// Issue #893: per-GPU-type hardware calibration for roofline and trained-physics backends.
 	// Key: GPU type string (e.g., "A100", "H100"). Value: HardwareCalib for that GPU.
@@ -156,6 +156,29 @@ type DeploymentConfig struct {
 	// coefficients (SC-004). Zero value (Enabled=false) is inert and backward-compatible
 	// (INV-6). See KVAutoCalcConfig and applyPerInstanceKVCapacity.
 	KVAutoCalc KVAutoCalcConfig `yaml:"-"`
+
+	// LoRAAdapterPlacement is the cluster-scoped LoRA adapter pre-placement (B-5,
+	// #1493, D3): construction-index → adapter ids seeded resident on that instance
+	// at t=0. The key is the initial-topology construction-loop counter idx ∈ [0,
+	// NumInstances) (DD-B5-g), never a slice position. Cluster-scoped because
+	// LoRAConfig is instance-agnostic; the cluster resolves each instance's own
+	// subset and hands only that []string to the instance (Principle I). Validated
+	// at construction (ValidateLoRAPlacement, INV-PS2). The shipped on-demand policy
+	// ignores the seed (seeds nothing); B-6's pre-placement consumes it.
+	// omitempty ⇒ an absent field is byte-identical to pre-B-5 (INV-6). Map value
+	// semantics: instance config, validated then read-only (R8).
+	LoRAAdapterPlacement map[int][]string `yaml:"lora_adapter_placement,omitempty"`
+
+	// LoRAPeriodicIntervalUs declares the simulation-time interval (microseconds)
+	// for a future periodic LoRA-seam re-resolution tick (B-7, #1495, D5). It is a
+	// SCAFFOLD this round: 0 = off/unset (the default), and NewClusterSimulator NEVER
+	// schedules a LoRAPeriodicTriggerEvent regardless of this value — a set interval
+	// is byte-identical to unset (INV-PS3, proven by
+	// TestPeriodicInterval_ByteIdenticalToUnset). A follow-up PR wires activation at
+	// the reserved point. int64 (not *int64) because 0 is the natural "off" sentinel,
+	// matching the ModelAutoscalerIntervalUs idiom (R9). omitempty ⇒ absent when unset
+	// (INV-6). CLI validates it is >= 0 (R3).
+	LoRAPeriodicIntervalUs int64 `yaml:"lora_periodic_interval_us,omitempty"`
 }
 
 // ToSimConfig returns the embedded SimConfig for per-instance construction.

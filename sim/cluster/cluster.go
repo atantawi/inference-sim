@@ -25,20 +25,20 @@ type ClusterSimulator struct {
 	aggregatedMetrics *sim.Metrics
 
 	// Online routing pipeline fields
-	clusterEvents         ClusterEventQueue
-	seqCounter            int64
-	admissionLatency      int64
-	routingLatency        int64
-	admissionPolicy       sim.AdmissionPolicy
-	priorityMap           *sim.SLOPriorityMap
-	snapshotProvider      *CachedSnapshotProvider
-	routingPolicy         sim.RoutingPolicy
-	rejectedRequests      int                       // EC-2: count of requests rejected by admission policy
-	routingRejections     int                       // I13: count of requests rejected at routing (no routable instances)
-	shedByTier            map[string]int            // per-SLOClass shedding: admission rejections + gateway queue shed + in-flight evictions
+	clusterEvents     ClusterEventQueue
+	seqCounter        int64
+	admissionLatency  int64
+	routingLatency    int64
+	admissionPolicy   sim.AdmissionPolicy
+	priorityMap       *sim.SLOPriorityMap
+	snapshotProvider  *CachedSnapshotProvider
+	routingPolicy     sim.RoutingPolicy
+	rejectedRequests  int            // EC-2: count of requests rejected by admission policy
+	routingRejections int            // I13: count of requests rejected at routing (no routable instances)
+	shedByTier        map[string]int // per-SLOClass shedding: admission rejections + gateway queue shed + in-flight evictions
 	// injectedByClass: per-SLOClass arrival counter. Incremented in ClusterArrivalEvent.Execute
 	// before any drop/route/admission decision. Goodput denominator (issue #1409, BC-5).
-	injectedByClass map[string]int64
+	injectedByClass       map[string]int64
 	trace                 *trace.SimulationTrace    // nil when trace-level is "none" (BC-1: zero overhead)
 	requestSource         RequestSource             // Source of requests to inject as arrival events. Drained once by Run().
 	inFlightRequests      map[string]int            // instance ID → dispatched-but-not-completed count (#463)
@@ -277,21 +277,21 @@ func NewClusterSimulator(config DeploymentConfig, requestSource RequestSource, o
 	}
 
 	cs := &ClusterSimulator{
-		config:               config,
-		instances:            make([]*InstanceSimulator, 0, config.NumInstances),
-		rng:                  rng,
-		requestSource:        requestSource,
-		clusterEvents:        make(ClusterEventQueue, 0),
-		admissionLatency:     config.AdmissionLatency,
-		routingLatency:       config.RoutingLatency,
-		admissionPolicy:      admissionPolicy,
-		priorityMap:          priorityMap,
-		snapshotProvider:     nil, // set after unified construction loop below
-		routingPolicy:        nil, // set after instance construction (needs cacheQueryFn from instances)
-		trace:                simTrace,
-		inFlightRequests:     make(map[string]int, config.NumInstances),
-		shedByTier:           make(map[string]int),
-		injectedByClass:      make(map[string]int64),
+		config:           config,
+		instances:        make([]*InstanceSimulator, 0, config.NumInstances),
+		rng:              rng,
+		requestSource:    requestSource,
+		clusterEvents:    make(ClusterEventQueue, 0),
+		admissionLatency: config.AdmissionLatency,
+		routingLatency:   config.RoutingLatency,
+		admissionPolicy:  admissionPolicy,
+		priorityMap:      priorityMap,
+		snapshotProvider: nil, // set after unified construction loop below
+		routingPolicy:    nil, // set after instance construction (needs cacheQueryFn from instances)
+		trace:            simTrace,
+		inFlightRequests: make(map[string]int, config.NumInstances),
+		shedByTier:       make(map[string]int),
+		injectedByClass:  make(map[string]int64),
 	}
 
 	// PD disaggregation: set pool membership (topology already validated above).
@@ -1767,6 +1767,9 @@ func (c *ClusterSimulator) aggregateMetrics() *sim.Metrics {
 		}
 		for k, v := range m.AdapterEvictionCounts {
 			merged.AdapterEvictionCounts[k] += v
+		}
+		for k, v := range m.AdapterPrefetchCounts {
+			merged.AdapterPrefetchCounts[k] += v
 		}
 		merged.PreemptionCount += m.PreemptionCount
 		merged.KVAllocationFailures += m.KVAllocationFailures
